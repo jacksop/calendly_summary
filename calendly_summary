@@ -33,10 +33,11 @@ defmodule CalendlySummary do
     IO.puts("Count, Practitioner|order")
     order_counts
     |> Map.to_list()
-    |> Enum.filter(fn {k,v} -> v > 1 end)
+    |> Enum.filter(fn {_k, v} -> v > 1 end)
+    |> List.keysort(0)
+    |> Enum.reverse()
     |> List.keysort(1)
     |> Enum.reverse()
-    |> List.keysort(0)
     |> Enum.each(fn ({email, count}) ->
       IO.puts("#{count}, #{email}")
     end)
