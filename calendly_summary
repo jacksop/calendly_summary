@@ -1,0 +1,98 @@
+#! /usr/bin/env elixir
+
+Mix.install([:csv])
+
+defmodule CalendlySummary do
+  def parse_file(file_name, event_type_name) do
+    stream = File.stream!(file_name)
+    |> CSV.decode(headers: true)
+    |> Stream.filter(&(filter_by_event(&1, event_type_name)))
+    |> Stream.map(&extract/1)
+
+    {email_counts, order_counts} = count(stream)
+    output_counts(email_counts)
+    output_multiples(order_counts)
+  end
+
+  defp output_counts(email_counts) do
+    IO.puts("\nCounts for all practitioners")
+    IO.puts("============================\n")
+    IO.puts("Count, Practitioner")
+    email_counts
+    |> Map.to_list()
+    |> List.keysort(1)
+    |> Enum.reverse()
+    |> Enum.each(fn ({email, count}) ->
+      IO.puts("#{count}, #{email}")
+    end)
+  end
+
+  defp output_multiples(order_counts) do
+    IO.puts("\n\nMultiple bookings for an order")
+    IO.puts("============================\n")
+    IO.puts("Count, Practitioner|order")
+    order_counts
+    |> Map.to_list()
+    |> Enum.filter(fn {k,v} -> v > 1 end)
+    |> List.keysort(1)
+    |> Enum.reverse()
+    |> List.keysort(0)
+    |> Enum.each(fn ({email, count}) ->
+      IO.puts("#{count}, #{email}")
+    end)
+  end
+
+  defp filter_by_event({:ok, item}, event_type_name) do
+    item["Event Type Name"] == event_type_name
+  end
+
+  defp filter_by_event({:error, msg}, _event_type_name) do
+    raise msg
+  end
+
+  defp extract({:ok, item}) do
+    order = item["Response 1"]
+    |> String.trim()
+    |> String.replace_leading("#", "")
+
+    %{
+      email: item["Invitee Email"],
+      order: order,
+      name: item["Invitee Name"],
+      date_time: item["Start Date & Time"]
+    }
+  end
+
+  defp count(stream) do
+    Enum.reduce(stream, {%{}, %{}}, fn (item, {email_acc, order_acc}) ->
+      {
+        count_email(email_acc, item.email),
+        count_order(order_acc, item.email, item.order)
+      }
+    end)
+  end
+
+  defp count_email(acc, email) do
+    value = Map.get(acc, email, 0) + 1
+    case value do
+      1 -> Map.put(acc, email, value)
+      _ -> %{acc | email => value}
+    end
+  end
+
+  defp count_order(acc, email, order) do
+    key = "#{email}|#{order}"
+    value = Map.get(acc, key, 0) + 1
+    case value do
+      1 -> Map.put(acc, key, value)
+      _ -> %{acc | key => value}
+    end
+  end
+end
+
+cli_args = System.argv()
+
+case length(cli_args) do
+  2 -> CalendlySummary.parse_file(List.first(cli_args), List.last(cli_args))
+  _ -> raise("Expecting 2 arguments. The CSV file path and the Event Type Name (e.g. Report Order Support - Practitioner only")
+end
